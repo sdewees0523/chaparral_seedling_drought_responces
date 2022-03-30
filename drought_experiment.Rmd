@@ -1,0 +1,227 @@
+---
+title: "drought experiment"
+author: "Shane Dewees"
+date: "3/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+library(lubridate)
+library(DescTools)
+library(gmodels)
+```
+
+use t.test then broom::tidy to get mean, pvalue and confidence intervals. 
+
+```{r, echo=FALSE, message= FALSE, warning=FALSE}
+soil_moisture <- read.csv(here("data", "soil_moisture.csv")) %>% 
+  mutate(date = mdy(date))
+
+drought_ceol <- soil_moisture %>% 
+  filter(date == "2022-03-11", species == "ceol", treatment == "drought") %>% 
+  select(id)
+
+drought_rhov <- soil_moisture %>% 
+  filter(date == "2022-03-11", species == "rhov", treatment == "drought") %>% 
+  select(id)
+
+drought_hear <- soil_moisture %>% 
+  filter(date == "2022-03-11", species == "hear", treatment == "drought") %>% 
+  select(id)
+
+soil_moisture <- soil_moisture %>% 
+  mutate(treatment = case_when(species == "ceol" & date == "2022-03-15" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & date == "2022-03-15" & id %in% drought_rhov$id ~ "drought",
+                               species == "hear" & date == "2022-03-15" & id %in% drought_hear$id ~ "drought",
+                               treatment == "" ~ "wet",
+                               TRUE ~ treatment))
+
+midday_stomata <- read.csv(here("data", "midday_stomtal_conductance.csv"))%>% 
+  mutate(treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & id %in% drought_rhov$id ~ "drought", 
+                               species == "hear" & id %in% drought_hear$id ~ "drought", 
+                               TRUE ~ "wet"),
+         date = mdy(date))
+hourly_stomata <- read.csv(here("data", "hourly_stomatal_conductance.csv"))%>% 
+  mutate(treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & id %in% drought_rhov$id ~ "drought", 
+                               species == "hear" & id %in% drought_hear$id ~ "drought", 
+                               TRUE ~ "wet"), 
+         date = mdy(date))
+flourescence <- read.csv(here("data","flourescence_water_potentials.csv")) %>% 
+  mutate(treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & id %in% drought_rhov$id ~ "drought", 
+                               species == "hear" & id %in% drought_hear$id ~ "drought", 
+                               TRUE ~ "wet"),
+         date = mdy(date))
+plant_height <- read.csv(here("data", "plant_height.csv"))%>% 
+  mutate(treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & id %in% drought_rhov$id ~ "drought", 
+                               species == "hear" & id %in% drought_hear$id ~ "drought", 
+                               TRUE ~ "wet"))
+
+leaf_conductance <- read.csv(here("data", "leaf_conductance.csv")) %>%
+  mutate(flow_rate_g_s = delta_weight/time_sec) %>% 
+  group_by(species, id) %>% 
+  summarise(flow_rate_g_s = mean(flow_rate_g_s, na.rm = TRUE),
+            mpa = mean(c(leaf_1, leaf_2, leaf_3), na.rm = TRUE),
+            leaf_area_cm2 = mean(leaf_area)) %>% 
+  mutate(flow_rate_g_s = abs(flow_rate_g_s),
+         kleaf = flow_rate_g_s/mpa,
+         leaf_area_m2 = leaf_area_cm2/10000,
+         kleaf_per_area = kleaf/leaf_area_m2,
+         treatment = "wet",
+         date = mdy("03/07/2022")) %>% 
+  select(species, id, kleaf_per_area, treatment, date)
+
+kleaf <- read.csv(here("data", "kleaf.csv")) %>% 
+  mutate(leaf_area_m2 = leaf_area_cm2/10000) %>% 
+  rename("kleaf" = "k_g_s_MPa") %>% 
+  mutate(kleaf_per_area = kleaf/leaf_area_m2,
+         treatment = case_when(numbr %in% drought_ceol$id ~ "drought", 
+                               TRUE ~ "wet"),
+         date = mdy("03/22/2022")) %>% 
+  rename("species" = "sp",
+         "id" = "numbr") %>% 
+  select(species, id, kleaf_per_area, treatment, date) %>% 
+  rbind(leaf_conductance)
+```
+
+```{r, echo=FALSE, message= FALSE, warning=FALSE}
+soil_moisture_mean <- soil_moisture %>% 
+  select(!id) %>% 
+  group_by(species, date, treatment) %>% 
+  nest(data = soil_moisture) %>% 
+  mutate(ci = map(data, ~ MeanCI(.x$soil_moisture))) %>% 
+  unnest_wider(ci)
+
+
+ggplot(soil_moisture_mean, aes(x= date, y = mean, col = treatment)) +
+  geom_point()+
+  geom_errorbar(aes(ymin = lwr.ci, ymax = upr.ci)) +
+  labs(x = "date",
+       y = "soil moisture (%)")+
+  facet_wrap(~species)
+
+flourescence_mean <- flourescence %>% 
+  group_by(species, date, treatment) %>% 
+  summarise(mean_flourescence = ci(dark_adapted_flourescence, na.rm = TRUE)[1],
+            flourescence_low = ci(dark_adapted_flourescence, na.rm = TRUE)[2],
+            flourescence_high = ci(dark_adapted_flourescence, na.rm = TRUE)[3],
+            mean_predawn = ci(water_potential_predawn, na.rm = TRUE)[1],
+            predawn_low = ci(water_potential_predawn, na.rm = TRUE)[2],
+            predawn_high = ci(water_potential_predawn, na.rm = TRUE)[3],
+            mean_midday = ci(water_potential_midday, na.rm = TRUE)[1],
+            midday_low = ci(water_potential_midday, na.rm = TRUE)[2],
+            midday_high = ci(water_potential_midday, na.rm = TRUE)[3])
+
+ggplot(flourescence_mean, aes(date, mean_flourescence, color = treatment))+
+  geom_point()+
+  geom_errorbar(aes(ymin=flourescence_low, ymax = flourescence_high))+
+  labs(x = "date",
+       y = "dark adapted flourescence") +
+  facet_wrap(~species)
+
+#ggplot(flourescence_mean, aes(species, mean_predawn))+
+ # geom_point()+ 
+  #geom_errorbar(aes(ymin = mean_predawn-sd_predawn, ymax = mean_predawn+sd_predawn))
+
+#ggplot(flourescence_mean, aes(species, mean_midday))+
+ # geom_point()+ 
+  #geom_errorbar(aes(ymin = mean_midday-sd_midday, ymax = mean_midday+sd_midday))
+
+#ggplot(flourescence_mean, aes(species, mean_water_potential_change)) +
+ # geom_point()
+
+#ggplot(flourescence_mean, aes(mean_midday, mean_predawn))+
+  #geom_point(aes(color = species))+
+  #geom_abline(slope = 1, intercept = 0)
+
+plant_height_mean <- plant_height %>% 
+  group_by(species, treatment) %>% 
+  summarise(mean = ci(height)[1],
+            lowCI = ci(height)[2],
+            highCI = ci(height)[3])
+
+ggplot(plant_height_mean, aes(species, mean, color = treatment))+
+  geom_point()+
+  geom_errorbar(aes(ymin=lowCI, ymax=highCI)) +
+  labs(x = "species",
+       y = "plant height (cm)")
+```
+
+```{r, echo=FALSE, message= FALSE, warning=FALSE}
+hourly_stomata_mean <- hourly_stomata %>% 
+  group_by(species, treatment, date, hour) %>% 
+  summarise(mean = ci(stomatal_conductance)[1],
+            lowci = ci(stomatal_conductance)[2],
+            highci = ci(stomatal_conductance)[3]) %>% 
+  ungroup() %>% 
+  mutate(time_hour = hm(hour))
+
+ggplot(hourly_stomata_mean, aes(x= time_hour@hour, y = mean, col = treatment, shape = as.factor(date)))+
+  geom_point(alpha = 0.5)+
+  geom_line(aes(x = time_hour@hour, y = mean)) +
+  geom_errorbar(aes(ymin=lowci, ymax=highci), size = 0.25) +
+  labs(x = "time of day",
+       y = "stomatal conductance") +
+  facet_wrap(~species)
+```
+
+```{r, echo=FALSE, message= FALSE, warning=FALSE}
+midday_stomata_mean <- midday_stomata %>%
+  group_by(species, date, treatment) %>% 
+  summarise(mean = ci(stomatal_conducatance)[1],
+            lowci = ci(stomatal_conducatance)[2],
+            highci = ci(stomatal_conducatance)[3])
+
+ggplot(midday_stomata_mean, aes(date, mean, color = treatment))+
+  geom_point()+
+  geom_errorbar(aes(ymin = lowci, ymax = highci)) + 
+  labs(x = "date",
+       y = "stomatal conductance") +
+  facet_wrap(~species)
+```
+
+```{r}
+kleaf_summary <- kleaf %>% 
+  select(!id) %>% 
+  group_by(species, date, treatment) %>% 
+  nest(data = kleaf_per_area) %>% 
+  mutate(ci = map(data, ~MeanCI(.x$kleaf_per_area))) %>% 
+  unnest_wider(ci) %>%
+  select(!data) %>% 
+  as.data.frame() %>% 
+  mutate(lwr.ci = case_when(lwr.ci < 0 ~ 0,
+                            TRUE~ lwr.ci))
+
+ggplot(kleaf_summary, aes(as.factor(date), mean, col = treatment))+
+  geom_point()+
+  geom_errorbar(aes(ymin=lwr.ci, ymax=upr.ci)) +
+  labs(x = "date",
+       y = "kleaf (g/sMpam2)") +
+  facet_wrap(~species)
+
+#ggplot(kleaf_summary, aes(treatment, mean_area)) +
+#  geom_point() + 
+#  geom_errorbar(aes(ymin = low_area, ymax = high_area)) +
+#  labs(x = "treatment",
+#       y = "leaf area (cm2)")
+
+kleaf_flourescence <- kleaf %>% 
+  right_join(flourescence, by = c("species", "id", "date", "treatment")) %>% 
+  drop_na(kleaf_per_area) %>% 
+  group_by(species, id, date, treatment) %>% 
+  summarise(kleaf_per_area = mean(kleaf_per_area, na.rm = TRUE),
+            dark_adapted_flourescence = mean(dark_adapted_flourescence, na.rm = TRUE)) %>% 
+  filter(date == "2022-03-22")
+
+ggplot(kleaf_flourescence, aes(x = dark_adapted_flourescence, y = kleaf_per_area, col = treatment)) +
+  geom_point() +
+  facet_wrap(~species)
+
+```
+
