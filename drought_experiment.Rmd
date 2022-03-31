@@ -12,6 +12,7 @@ library(tidyverse)
 library(lubridate)
 library(DescTools)
 library(gmodels)
+library(janitor)
 ```
 
 use t.test then broom::tidy to get mean, pvalue and confidence intervals. 
@@ -32,31 +33,108 @@ drought_hear <- soil_moisture %>%
   filter(date == "2022-03-11", species == "hear", treatment == "drought") %>% 
   select(id)
 
+soil_moisture_3_23 <- read.csv(here("data", "03-23 Soil Moisture Data.csv")) %>% 
+  select(Note, Moisture, Timestamp) %>% 
+  separate(Note, into = c("species", "id"), sep = " ") %>% 
+  rename(soil_moisture = Moisture) %>% 
+  rename(date = Timestamp) %>% 
+  mutate(species = str_replace(species, "R", "r"),
+         species = str_replace(species, "C", "c"),
+         species = str_replace(species, "H", "h"),
+         date = dmy_hm(date),
+         treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & id %in% drought_rhov$id ~ "drought",
+                               species == "hear" & id %in% drought_hear$id ~ "drought",
+                               TRUE ~ "wet")) %>% 
+  separate(date, into = c("date", "time"), sep = " ") %>% 
+  select(!time)
+
+soil_moisture_3_31 <- read.csv(here("data", "03-31-soil-moisture.csv")) %>% 
+  select(Note, Moisture) %>% 
+  separate(Note, into = c("species", "id", "treatment"), sep = "-") %>% 
+  rename(soil_moisture = Moisture) %>%
+  mutate(species = str_replace(species, "R", "r"),
+         species = str_replace(species, "C", "c"),
+         species = str_replace(species, "H", "h"),
+         date = dmy("31-03-2022"),
+         species = str_replace(species, "EOL", "eol"),
+         treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & id %in% drought_rhov$id ~ "drought",
+                               species == "hear" & id %in% drought_hear$id ~ "drought",
+                               TRUE ~ "wet")) %>% 
+  drop_na(id)
+
 soil_moisture <- soil_moisture %>% 
   mutate(treatment = case_when(species == "ceol" & date == "2022-03-15" & id %in% drought_ceol$id ~ "drought",
                                species == "rhov" & date == "2022-03-15" & id %in% drought_rhov$id ~ "drought",
                                species == "hear" & date == "2022-03-15" & id %in% drought_hear$id ~ "drought",
                                treatment == "" ~ "wet",
-                               TRUE ~ treatment))
+                               TRUE ~ treatment)) %>% 
+  rbind(soil_moisture_3_23) %>% 
+  rbind(soil_moisture_3_31)
+```
+
+```{r}
+gsw <- read.csv(here("data", "gsw light adap", "2022-03-31", "gsw_light_adap_Shane_2022_03_31T19_26_28_209Z_1.csv")) %>% 
+  row_to_names(1) %>% 
+  filter(!row_number() %in% c(1)) %>% 
+  select("species", "id", "gsw", "PhiPS2", "Date") %>% 
+  rename(stomatal_conductance = gsw) %>% 
+  rename(light_adapted_flourescence = PhiPS2) %>% 
+  rename(date = Date) %>% 
+  mutate(id = as.numeric(id),
+         light_adapted_flourescence = as.numeric(light_adapted_flourescence),
+         stomatal_conductance = as.numeric(stomatal_conductance),
+         date = ymd(date),
+         treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & id %in% drought_rhov$id ~ "drought", 
+                               species == "hear" & id %in% drought_hear$id ~ "drought", 
+                               TRUE ~ "wet"))
 
 midday_stomata <- read.csv(here("data", "midday_stomtal_conductance.csv"))%>% 
+  rename(stomatal_conductance = stomatal_conducatance) %>% 
   mutate(treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
                                species == "rhov" & id %in% drought_rhov$id ~ "drought", 
                                species == "hear" & id %in% drought_hear$id ~ "drought", 
                                TRUE ~ "wet"),
-         date = mdy(date))
+         date = mdy(date)) %>% 
+  rbind(gsw)
 hourly_stomata <- read.csv(here("data", "hourly_stomatal_conductance.csv"))%>% 
   mutate(treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
                                species == "rhov" & id %in% drought_rhov$id ~ "drought", 
                                species == "hear" & id %in% drought_hear$id ~ "drought", 
                                TRUE ~ "wet"), 
          date = mdy(date))
+
+
+dark_adapted <- read.csv(here("data", "dark adapted", "2022-03-31", "dark_adapted_Shane_Dewees_2022_03_31T19_26_28_179Z_1.csv")) %>% 
+  row_to_names(1) %>% 
+  filter(!row_number() %in% c(1)) %>% 
+  select("species", "plant id", "Fv/Fm", "Date") %>% 
+  rename("id" = "plant id") %>% 
+  rename("dark_adapted_flourescence" = "Fv/Fm") %>% 
+  rename(date = Date) %>% 
+  mutate(date = ymd(date),
+         id = str_remove(id, "0"),
+         id = as.numeric(id),
+         dark_adapted_flourescence = as.numeric(dark_adapted_flourescence),
+         treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
+                               species == "rhov" & id %in% drought_rhov$id ~ "drought", 
+                               species == "hear" & id %in% drought_hear$id ~ "drought", 
+                               TRUE ~ "wet"),
+         water_potential_predawn = NA,
+         water_potential_midday = NA)
+
 flourescence <- read.csv(here("data","flourescence_water_potentials.csv")) %>% 
   mutate(treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
                                species == "rhov" & id %in% drought_rhov$id ~ "drought", 
                                species == "hear" & id %in% drought_hear$id ~ "drought", 
                                TRUE ~ "wet"),
-         date = mdy(date))
+         date = mdy(date)) %>% 
+  rbind(dark_adapted)
+```
+
+```{r}
 plant_height <- read.csv(here("data", "plant_height.csv"))%>% 
   mutate(treatment = case_when(species == "ceol" & id %in% drought_ceol$id ~ "drought",
                                species == "rhov" & id %in% drought_rhov$id ~ "drought", 
@@ -174,9 +252,9 @@ ggplot(hourly_stomata_mean, aes(x= time_hour@hour, y = mean, col = treatment, sh
 ```{r, echo=FALSE, message= FALSE, warning=FALSE}
 midday_stomata_mean <- midday_stomata %>%
   group_by(species, date, treatment) %>% 
-  summarise(mean = ci(stomatal_conducatance)[1],
-            lowci = ci(stomatal_conducatance)[2],
-            highci = ci(stomatal_conducatance)[3])
+  summarise(mean = ci(stomatal_conductance)[1],
+            lowci = ci(stomatal_conductance)[2],
+            highci = ci(stomatal_conductance)[3])
 
 ggplot(midday_stomata_mean, aes(date, mean, color = treatment))+
   geom_point()+
