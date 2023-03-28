@@ -1,0 +1,473 @@
+---
+title: "Thesis Stats"
+author: "Michaele Dietzel"
+date: "5/31/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)                      
+library(here)
+library(janitor)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(stats)
+library(agricolae)
+library(tibble)
+library(lubridate)
+library(patchwork)
+library(DescTools)
+```
+
+```{r}
+#load excel and make date numeric
+thesis_data <- read_xlsx("~/Desktop/RProjects/chaparral_seedling_drought_responses/thesis_data.xlsx", ) %>% 
+  clean_names %>% 
+  mutate(date = paste0(date,"/22"),
+         date = mdy(date),
+         across(4:6, as.numeric)) 
+```
+
+```{r}
+#prep for soil moisture by species plot
+#watered
+watered_soil_moisutre <- thesis_data %>% 
+  select(date, species, id, treatment, soil_moisture, order) %>% 
+  filter(treatment == "wet") %>% 
+  group_by(date, species) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#droughted
+drought_soil_moisutre <- thesis_data %>% 
+  select(date, species, id, treatment, soil_moisture, order) %>% 
+  filter(treatment == "drought") %>% 
+  group_by(date, species) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+```
+
+```{r}
+#soil moisture by species plotting attempt
+#watered
+a <- ggplot(watered_soil_moisutre, aes(x = date, y = soil_moisture, group = species, color= species)) +
+    geom_line() +
+   theme(legend.position="none",
+        plot.caption = element_text(hjust = 0.8)) +
+  ggtitle("Figure 1") +
+  labs(x = "date",
+       y = "soil moisture (%)", 
+       caption = "Figure 1: Soil moisture (%) over time, watered treatment",
+ fill = "") +
+  ylim(0,60)
+
+#droughted
+b <- ggplot(drought_soil_moisutre, aes(x = date, y = soil_moisture, group = species, color= species)) +
+    geom_line() +
+   theme(plot.caption = element_text(hjust = 0.5)) +
+  ggtitle("Figure 2") +
+  labs(x = "date",
+       y = "soil moisture (%)", 
+       caption = "Figure 2: Soil moisture (%) over time, droughted treatment",
+ fill = "") +
+  ylim(0,60)
+
+#combine
+a + b
+
+```
+
+```{r}
+#prep for time v. conductance
+#watered
+watered_cond_date <- thesis_data %>% 
+  select(date, species, id, treatment, stomatal_conductance, order) %>% 
+  filter(treatment == "wet") %>% 
+  group_by(date, species) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#droughted
+drought_cond_date <- thesis_data %>% 
+  select(date, species, id, treatment, stomatal_conductance, order) %>% 
+  filter(treatment == "drought") %>% 
+  group_by(date, species) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+```
+
+
+```{r}
+#stomatal conductance v. time
+#watered
+a <- ggplot(watered_cond_date, aes(x = date, y = stomatal_conductance, group = species, color= species)) +
+    geom_line() +
+   theme(legend.position="none",
+         plot.caption = element_text(hjust = 0.75)) +
+   ggtitle("Figure 3") +
+  labs(x = "date",
+       y = "stomatal conductance (mmol m^−2 s^−1)",
+       caption = "Figure 3: Stomatal conductance over time, watered treatment",
+ fill = "") +
+  ylim(0,0.5)
+
+#droughted
+b <- ggplot(drought_cond_date, aes(x = date, y = stomatal_conductance, group = species, color= species)) +
+    geom_line() +
+  theme(plot.caption = element_text(hjust = 0)) +
+   ggtitle("Figure 4") +
+  labs(x = "date",
+       y = "stomatal conductance (mmol m^−2 s^−1)",
+       caption = "Figure 4: Stomatal conductance over time, droughted treatment",
+ fill = "") +
+  ylim(0,0.5)
+
+a + b
+
+```
+
+
+
+```{r}
+#prep for conductance v. moisture plot
+#both
+conductance_soil_moisutre <- thesis_data %>% 
+  select(date, species, id, treatment, soil_moisture, order, stomatal_conductance) %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#watered
+conductance_soil_moisutre_wet <- thesis_data %>% 
+  select(date, species, id, treatment, soil_moisture, order, stomatal_conductance) %>% 
+  filter(treatment == "wet") %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#droughted
+conductance_soil_moisutre_drought <- thesis_data %>% 
+  select(date, species, id, treatment, soil_moisture, order, stomatal_conductance) %>% 
+  filter(treatment == "drought") %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+```
+
+```{r}
+#conductance v moisture plots seperated
+#watered
+ggplot(conductance_soil_moisutre_wet, aes(x = soil_moisture, y = stomatal_conductance, group = species, color = species)) +
+    geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "soil moisture (%)",
+       y = "stomatal conductance (mmol m^−2 s^−1)",
+        caption = "Figure 5: Stomatal conductance by species based on soil moisture, watered treatment.",
+ fill = "") +
+   ggtitle("Figure 5") 
+
+#droughted
+ggplot(conductance_soil_moisutre_drought, aes(x = soil_moisture, y = stomatal_conductance, group = species, color = species)) +
+    geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "soil moisture (%)",
+       y = "stomatal conductance (mmol m^−2 s^−1)",
+ caption = "Figure 6: Stomatal conductance by species based on soil moisture, droughted treatment.",
+ fill = "") +
+   ggtitle("Figure 6") 
+```
+
+```{r}
+set.seed(0)
+ceol_t <- c(rnorm(10, mean = 0.6525, sd = 0.07))
+t.test(ceol_t, mu = 0.5987) # Ho: mu = 39000
+
+```
+
+
+```{r}
+#conductance v moisture plot, both treatments
+ggplot(conductance_soil_moisutre, aes(x= soil_moisture, y = stomatal_conductance, col = species)) +
+  geom_point(alpha = 0.5)+
+  geom_smooth(method = "lm") +
+  labs(x = "soil moisture (%)",
+       y = "stomatal conductance (mmol m^−2 s^−1)",
+        caption = "Figure 7: Stomatal conductance by species based on soil moisture, droughted and watered treatments.",
+ fill = "") +
+  ggtitle("Figure 7") +
+  facet_wrap(~species)
+```
+```{r}
+#ceol lm, compares conductance to moisture
+ceol_conductance <- conductance_soil_moisutre %>% 
+  filter(species == "ceol")
+
+summary(lm(stomatal_conductance~soil_moisture, data = ceol_conductance))
+
+#rhov lm, compares conductance to moisture
+rhov_conductance <- conductance_soil_moisutre %>% 
+  filter(species == "rhov")
+
+summary(lm(stomatal_conductance~soil_moisture, data = rhov_conductance))
+
+#hear lm, compares conductance to moisture
+hear_conductance <- conductance_soil_moisutre %>% 
+  filter(species == "hear")
+
+summary(lm(stomatal_conductance~soil_moisture, data = hear_conductance))
+
+#lm comparing species to one another
+summary(lm(stomatal_conductance~soil_moisture + species, data = conductance_soil_moisutre))
+```
+```{r}
+#prep for time v. fluorescence
+#watered
+watered_fluor_date <- thesis_data %>% 
+  select(date, species, id, treatment, dark_adapted_fluorescence, order) %>% 
+  filter(treatment == "wet") %>% 
+  group_by(date, species) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#droughted
+drought_fluor_date <- thesis_data %>% 
+  select(date, species, id, treatment, dark_adapted_fluorescence, order) %>% 
+  filter(treatment == "drought") %>% 
+  group_by(date, species) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+```
+
+
+```{r}
+#fluorescence v. time
+#watered
+a <- ggplot(watered_fluor_date, aes(x = date, y = dark_adapted_fluorescence, group = species, color= species)) +
+    geom_line() +
+   theme(legend.position="none") +
+   ggtitle("Figure 8") +
+  labs(x = "date",
+       y = "fluorescence (Fv/Fm)",  
+       caption = "Figure 8: Fluorescence over time, watered treatment.",
+ fill = "") +
+   ylim(0,0.9)
+
+#droughted
+b <- ggplot(drought_fluor_date, aes(x = date, y = dark_adapted_fluorescence, group = species, color= species)) +
+    geom_line() +
+   ggtitle("Figure 9") +
+  labs(x = "date",
+       y = "fluorescence (Fv/Fm)",
+        caption = "Figure 9: Fluorescence over time, droughted treatment.",
+ fill = "") +
+   ylim(0,0.9)
+
+a + b
+
+```
+
+```{r}
+#prep for fluorescence v. moisture plot
+#both
+fluorescence_soil_moisutre <- thesis_data %>% 
+  select(date, species, id, treatment, soil_moisture, order, dark_adapted_fluorescence) %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#watered
+fluorescence_soil_moisutre_wet <- thesis_data %>% 
+  select(date, species, id, treatment, soil_moisture, order, dark_adapted_fluorescence) %>% 
+  filter(treatment == "wet") %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#droughted
+fluorescence_soil_moisutre_drought <- thesis_data %>% 
+  select(date, species, id, treatment, soil_moisture, order, dark_adapted_fluorescence) %>% 
+  filter(treatment == "drought") %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+```
+
+```{r}
+#fluorescence v moisture plots seperated
+#watered
+ggplot(fluorescence_soil_moisutre_wet, aes(x = soil_moisture, y = dark_adapted_fluorescence, group = species, color = species)) +
+   geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "soil moisture (%)",
+       y = "fluorescence (Fv/Fm)",
+ caption = "Figure 10: Dark adapted fluorescence by species based on soil moisture, watered treatment.",
+ fill = "") +
+  ggtitle("Figure 10")
+  
+
+#droughted
+ggplot(fluorescence_soil_moisutre_drought, aes(x = soil_moisture, y = dark_adapted_fluorescence, group = species, color = species)) +
+    geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "soil moisture (%)",
+       y = "fluorescence (Fv/Fm)",
+ caption = "Figure 11: Dark adapted fluorescence by species based on soil moisture, droughted treatment.",
+ fill = "") +
+  ggtitle("Figure 11")
+```
+
+```{r}
+#fluorescence v moisture plot, both treatments
+ggplot(fluorescence_soil_moisutre, aes(x= soil_moisture, y = dark_adapted_fluorescence, col = species))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(method = "lm") +
+  labs(x = "soil moisture (%)",
+       y = "fluorescence (Fv/Fm)",
+        caption = "Figure 12: Dark adapted fluorescence by species based on soil moisture, droughted and watered treatments.",
+ fill = "") +
+   ggtitle("Figure 12") +
+   facet_wrap(~species) 
+```
+
+```{r}
+#ceol lm, compares fluorescence to moisture
+ceol_fluor <- fluorescence_soil_moisutre %>% 
+  filter(species == "ceol")
+
+summary(lm(dark_adapted_fluorescence~soil_moisture, data = ceol_fluor))
+
+#rhov lm, compares fluorescence to moisture
+rhov_fluor <- fluorescence_soil_moisutre %>% 
+  filter(species == "rhov")
+
+summary(lm(dark_adapted_fluorescence~soil_moisture, data = rhov_fluor))
+
+#hear lm, compares fluorescence to moisture
+hear_fluor <- fluorescence_soil_moisutre %>% 
+  filter(species == "hear")
+
+summary(lm(dark_adapted_fluorescence~soil_moisture, data = hear_fluor))
+
+#lm comparing species to one another
+summary(lm(dark_adapted_fluorescence~soil_moisture + species, data = fluorescence_soil_moisutre))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+ggplot(cond_date_mean, aes(date, mean, color = treatment))+
+  geom_point()+
+  geom_errorbar(aes(ymin = lowci, ymax = highci)) + 
+  labs(x = "date",
+       y = "stomatal conductance") +
+  facet_wrap(~species)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#prep for fluorescence v. conductance plot
+#both
+fluor_cond <- thesis_data %>% 
+  select(date, species, id, treatment, stomatal_conductance, order, dark_adapted_fluorescence) %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#watered
+fluor_cond_wet <- thesis_data %>% 
+  select(date, species, id, treatment, stomatal_conductance, order, dark_adapted_fluorescence) %>% 
+  filter(treatment == "wet") %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+
+#droughted
+fluor_cond_drought <- thesis_data %>% 
+  select(date, species, id, treatment, stomatal_conductance, order, dark_adapted_fluorescence) %>% 
+  filter(treatment == "drought") %>% 
+  group_by(date, species, treatment) %>% 
+  summarize(across(1:4, mean)) %>% 
+  arrange(order)
+```
+
+```{r}
+#fluorescence v moisture plots seperated
+#watered
+ggplot(fluor_cond_wet, aes(x = stomatal_conductance, y = dark_adapted_fluorescence, group = species, color = species)) +
+    geom_line() +
+  labs(x = "stomatal conductance",
+       y = "fluorescence",
+ caption = "Figure 9: Dark adapted fluorescence by species based on stomatal conductance, watered treatment. Created by Michaele Dietzel",
+ fill = "")
+
+#droughted
+ggplot(fluor_cond_drought, aes(x = stomatal_conductance, y = dark_adapted_fluorescence, group = species, color = species)) +
+    geom_line() +
+  labs(x = "stomatal conductance",
+       y = "fluorescence",
+ caption = "Figure 10: Dark adapted fluorescence by species based on stomatal conductance, droughted treatment. Created by Michaele Dietzel",
+ fill = "")
+
+#switch axis
+```
+
+```{r}
+#fluorescence v moisture plot, both treatments
+ggplot(fluor_cond, aes(x= stomatal_conductance, y = dark_adapted_fluorescence, col = species, shape = as.factor(treatment)))+
+  geom_point(alpha = 0.5)+
+  geom_line(aes(x = stomatal_conductance, y = dark_adapted_fluorescence)) +
+  labs(x = "stomatal conductance",
+       y = "fluorescence",
+        caption = "Figure 11: Dark adapted fluorescence by species based on stomatal conductance, droughted and watered treatments. Created by Michaele Dietzel",
+ fill = "")
+```
+
+group by species, treatment, date
